@@ -188,24 +188,46 @@
     const before = state.effects.length;
     state.effects = state.effects.filter((e) =>
       (e.type === 'rage' && e.expiresAt > now) ||
-      (e.type === 'fireball' && e.lesson >= state.lesson));
+      ((e.type === 'fireball' || e.type === 'minus') && e.lesson >= state.lesson));
     return before !== state.effects.length;
   }
   function rageOf(id) { return state.effects.find((e) => e.type === 'rage' && e.studentId === id && e.expiresAt > Date.now()); }
   function fireballOf(id) { return state.effects.find((e) => e.type === 'fireball' && e.studentId === id && e.lesson === state.lesson); }
   function fireballPending(id) { return state.effects.find((e) => e.type === 'fireball' && e.studentId === id && e.lesson > state.lesson); }
   function multiplier(id) { return (rageOf(id) ? 2 : 1) * (fireballOf(id) ? 0.5 : 1); }
+  function minusHits(id) { return state.effects.filter((e) => e.type === 'minus' && e.studentId === id && e.lesson === state.lesson); }
+  function browniesOwed(id) { return state.brownies.filter((b) => !b.done && b.studentId === id).length; }
 
+  /** Words for whatever is changing this student's earnings right now. */
+  function boostNote(id) {
+    const r = rageOf(id), f = fireballOf(id);
+    if (r && f) return 'Rage ×2 + Fireball ½';
+    if (r) return 'Rage ×2';
+    if (f) return 'Fireball ½';
+    return '';
+  }
+
+  /** Apply Rage / Fireball to BP being earned. Every gain goes through here. */
+  function boosted(id, amount) {
+    if (amount <= 0) return { delta: amount, note: '' };
+    const note = boostNote(id);
+    return { delta: roundHalf(amount * multiplier(id)), note: note ? ` (${note})` : '' };
+  }
+
+  function fmtDate(ts) { return new Date(ts).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); }
   function daysLeft(ts) { return Math.max(1, Math.ceil((ts - Date.now()) / DAY)); }
 
   function effectBadges(id) {
     const out = [];
     const r = rageOf(id);
-    if (r) out.push(h('span', { class: 'fx rage', title: `Rage until ${new Date(r.expiresAt).toLocaleDateString()}` }, '😤 Rage ×2 · ', `${daysLeft(r.expiresAt)}d`));
+    if (r) out.push(h('span', { class: 'fx rage', title: `Every BP earned is doubled until ${fmtDate(r.expiresAt)}` }, `😤 Rage ×2 · ${daysLeft(r.expiresAt)}d left`));
     const f = fireballOf(id);
-    if (f) out.push(h('span', { class: 'fx fire', title: `Fireballed by ${nameOf(f.by)}` }, '🔥 Fireball ½ · this lesson'));
+    if (f) out.push(h('span', { class: 'fx fire', title: `Fireballed by ${nameOf(f.by)}: BP earned is halved until the lesson ends` }, '🔥 Fireball ½ · this lesson'));
     const fp = fireballPending(id);
-    if (fp) out.push(h('span', { class: 'fx fire pending', title: `Fireballed by ${nameOf(fp.by)}` }, '🔥 Fireball ½ · next lesson'));
+    if (fp) out.push(h('span', { class: 'fx fire pending', title: `Fireballed by ${nameOf(fp.by)}: BP earned will be halved next lesson` }, '🔥 Fireball ½ · next lesson'));
+    minusHits(id).forEach((m) => out.push(h('span', { class: 'fx minus', title: `Minus Spell cast by ${nameOf(m.by)} this lesson` }, `🪄 −${fmt(m.amount)} by ${nameOf(m.by)}`)));
+    const owed = browniesOwed(id);
+    if (owed) out.push(h('span', { class: 'fx brownie', title: 'Bought The Eternal Brownie and is waiting for it' }, `🍫 Brownie owed${owed > 1 ? ' ×' + owed : ''}`));
     return out.length ? h('span', { class: 'fx-wrap' }, out) : null;
   }
 
@@ -247,23 +269,15 @@
       ids.forEach((id) => {
         const s = student(id);
         if (!s) return;
-        let delta = amount;
-        let note = '';
-        if (amount > 0) {
-          const m = multiplier(id);
-          delta = roundHalf(amount * m);
-          if (m === 2) note = ' (Rage ×2)';
-          else if (m === 0.5) note = ' (Fireball ½)';
-          else if (m === 1 && rageOf(id) && fireballOf(id)) note = ' (Rage ×2, Fireball ½)';
-        } else {
-          delta = Math.max(amount, -s.bp);
-        }
+        let { delta, note } = boosted(id, amount);
+        if (amount < 0) delta = Math.max(amount, -s.bp);
         s.bp = roundHalf(s.bp + delta);
         flash.add(id);
         log(`${s.name} ${delta >= 0 ? 'earned' : 'lost'} ${fmt(Math.abs(delta))} BP${note}${reason ? ' — ' + reason : ''}`, { kind: delta >= 0 ? 'up' : 'down', delta });
-        parts.push(`${s.name} ${signed(delta)}`);
+        parts.push(`${s.name} ${signed(delta)}${note}`);
       });
-      toast(parts.length > 3 ? `${signed(amount)} BP to ${parts.length} students` : parts.join(', '));
+      const boostedCount = parts.filter((t) => t.includes('(')).length;
+      toast(parts.length > 3 ? `${signed(amount)} BP to ${parts.length} students${boostedCount ? ` (${boostedCount} changed by power-ups, see History)` : ''}` : parts.join(', '));
     });
   }
 
@@ -295,6 +309,7 @@
           const target = student(opts.targetId);
           const lost = Math.min(p.amount, target.bp);
           target.bp = roundHalf(target.bp - lost);
+          state.effects.push({ id: uid(), type: 'minus', studentId: target.id, by: buyerId, amount: lost, lesson: state.lesson });
           flash.add(target.id);
           log(`${buyer.name} ${paid} on ${target.name}, who lost ${fmt(lost)} BP`, { kind: 'power', delta: -lost });
           toast(`🪄 ${target.name} loses ${fmt(lost)} BP`);
@@ -406,6 +421,7 @@
     $('#brownieCount').textContent = pending;
 
     renderBoard();
+    renderActive();
     renderShop();
     renderHistory();
     if (teacher) {
@@ -433,9 +449,12 @@
   }
 
   function quickButtons(id) {
-    return h('span', { class: 'quick' },
-      h('button', { type: 'button', class: 'btn small amt plus', title: 'Give 1 BP', onclick: () => award([id], 1, '') }, '+1'),
-      h('button', { type: 'button', class: 'btn small amt plus', title: 'Give 5 BP', onclick: () => award([id], 5, '') }, '+5'),
+    const plus = (n) => {
+      const { delta, note } = boosted(id, n);
+      return h('button', { type: 'button', class: `btn small amt plus${delta !== n ? ' boosted' : ''}`, title: delta !== n ? `Gives +${fmt(delta)}${note}` : `Give ${n} BP`, onclick: () => award([id], n, '') },
+        `+${n}`, delta !== n ? h('small', null, `=${fmt(delta)}`) : null);
+    };
+    return h('span', { class: 'quick' }, plus(1), plus(5),
       h('button', { type: 'button', class: 'btn small amt minus', title: 'Take 1 BP', onclick: () => award([id], -1, '') }, '−1'));
   }
 
@@ -459,7 +478,8 @@
         h('span', { class: 'title' }, titled ? entry.title.name : p.name),
         h('span', { class: 'name' }, titled ? entry.s.name : 'Unclaimed'),
         titled ? h('span', { class: 'bp' }, fmt(entry.s.bp), h('small', null, 'BP')) : h('span', { class: 'muted small' }, 'Earn BP to take this seat'),
-        titled ? effectBadges(entry.s.id) : null);
+        titled ? effectBadges(entry.s.id) : null,
+        titled ? quickButtons(entry.s.id) : null);
     }));
 
     const rest = r.filter((e, i) => i >= 3 || e.title.key === 'subject');
@@ -470,6 +490,29 @@
         h('span', { class: 'rname' }, s.name, effectBadges(s.id)),
         h('span', { class: 'rbp' }, fmt(s.bp), h('small', null, 'BP')),
         quickButtons(s.id))));
+  }
+
+  /** Every effect currently in play, shown under the podium (and on the projector). */
+  function renderActive() {
+    const items = [];
+    const byTime = [...state.effects].sort((a, b) => (a.expiresAt || 0) - (b.expiresAt || 0));
+    byTime.forEach((e) => {
+      const who = nameOf(e.studentId);
+      if (e.type === 'rage' && e.expiresAt > Date.now()) {
+        items.push(h('li', { class: 'fx-item rage' }, h('b', null, `😤 ${who}`), h('span', null, `Rage: earns 2× BP until ${fmtDate(e.expiresAt)} (${daysLeft(e.expiresAt)} days left)`)));
+      } else if (e.type === 'fireball' && e.lesson === state.lesson) {
+        items.push(h('li', { class: 'fx-item fire' }, h('b', null, `🔥 ${who}`), h('span', null, `Fireball from ${nameOf(e.by)}: earns ½ BP until this lesson ends`)));
+      } else if (e.type === 'fireball' && e.lesson > state.lesson) {
+        items.push(h('li', { class: 'fx-item fire' }, h('b', null, `🔥 ${who}`), h('span', null, `Fireball from ${nameOf(e.by)}: will earn ½ BP next lesson`)));
+      } else if (e.type === 'minus' && e.lesson === state.lesson) {
+        items.push(h('li', { class: 'fx-item minus' }, h('b', null, `🪄 ${who}`), h('span', null, `hit by ${nameOf(e.by)}'s Minus Spell: lost ${fmt(e.amount)} BP`)));
+      }
+    });
+    state.brownies.filter((b) => !b.done).forEach((b) => {
+      items.push(h('li', { class: 'fx-item brownie' }, h('b', null, `🍫 ${student(b.studentId)?.name || b.name}`), h('span', null, `is owed an Eternal Brownie (bought ${fmtDate(b.ts)})`)));
+    });
+    $('#activeFx').hidden = state.students.length === 0;
+    $('#activeList').replaceChildren(...(items.length ? items : [h('li', { class: 'muted' }, 'No power-ups active right now. Visit the Power-up Shop to change that.')]));
   }
 
   /* ---- Give BP tab */
@@ -484,17 +527,18 @@
       h('button', { type: 'button', class: 'chip', 'aria-pressed': selected.has(s.id) ? 'true' : 'false',
         onclick: () => { selected.has(s.id) ? selected.delete(s.id) : selected.add(s.id); renderAward(); } },
         s.name,
-        rageOf(s.id) ? h('span', { class: 'dot rage', title: 'Rage ×2' }) : null,
-        fireballOf(s.id) ? h('span', { class: 'dot fire', title: 'Fireball ½' }) : null,
+        rageOf(s.id) ? h('span', { class: 'tag rage', title: 'Rage: earns double' }, '×2') : null,
+        fireballOf(s.id) ? h('span', { class: 'tag fire', title: 'Fireball: earns half this lesson' }, '½') : null,
         h('span', { class: 'cbp' }, fmt(s.bp)))) : [h('p', { class: 'muted' }, 'Add students first in the Students tab.')]));
     $('#selCount').textContent = `(${selected.size} picked)`;
 
-    const names = [...selected].map((id) => {
-      const s = student(id);
-      const m = multiplier(id);
-      return m === 1 ? s.name : `${s.name} (${m === 2 ? '×2 Rage' : '½ Fireball'})`;
-    });
-    $('#awardPreview').textContent = names.length ? `Picked: ${names.join(', ')}` : 'Nobody picked yet.';
+    const picked = [...selected].map(student).filter(Boolean);
+    const affected = picked.filter((s) => boostNote(s.id));
+    const prev = $('#awardPreview');
+    if (!picked.length) prev.replaceChildren('Nobody picked yet.');
+    else prev.replaceChildren(
+      h('span', null, `Picked: ${picked.map((s) => s.name).join(', ')}`),
+      ...affected.map((s) => h('span', { class: 'preview-boost' }, `${s.name} has ${boostNote(s.id)}: +5 gives +${fmt(boosted(s.id, 5).delta)}, +1 gives +${fmt(boosted(s.id, 1).delta)}`)));
     const disabled = selected.size === 0;
     document.querySelectorAll('#plusAmounts button, #minusAmounts button, #customForm button').forEach((b) => { b.disabled = disabled; });
   }
@@ -670,10 +714,12 @@
     };
 
     switch (slice.type) {
-      case 'gain':
-        commit(() => change(spinnerId, v, `🎡 ${name} won {n} BP on the wheel`));
-        finish(`${slice.label} — ${name} +${fmt(v)} BP`);
+      case 'gain': {
+        const { delta, note } = boosted(spinnerId, v);
+        commit(() => change(spinnerId, delta, `🎡 ${name} won {n} BP on the wheel${note}`));
+        finish(`${slice.label} — ${name} +${fmt(delta)} BP${note}`);
         break;
+      }
       case 'lose': {
         let lost = 0;
         commit(() => { lost = change(spinnerId, -v, `🎡 ${name} lost {n} BP on the wheel`); });
@@ -700,9 +746,9 @@
         break;
       case 'question':
         result.replaceChildren(header,
-          h('p', null, `Ask ${name} a question. Correct answer wins ${fmt(v)} BP.`),
+          h('p', null, `Ask ${name} a question. Correct answer wins ${fmt(boosted(spinnerId, v).delta)} BP${boosted(spinnerId, v).note}.`),
           h('div', { class: 'btn-row' },
-            h('button', { type: 'button', class: 'btn good', onclick: () => { commit(() => change(spinnerId, v, `🎡 ${name} answered the wheel question correctly: +{n} BP`)); finish(`Correct! ${name} +${fmt(v)} BP`); } }, 'Correct'),
+            h('button', { type: 'button', class: 'btn good', onclick: () => { const { delta, note } = boosted(spinnerId, v); commit(() => change(spinnerId, delta, `🎡 ${name} answered the wheel question correctly: +{n} BP${note}`)); finish(`Correct! ${name} +${fmt(delta)} BP${note}`); } }, 'Correct'),
             h('button', { type: 'button', class: 'btn danger', onclick: () => { commit(() => log(`🎡 ${name} got the wheel question wrong`, { kind: 'power' })); finish(`Wrong answer. No BP this time.`); } }, 'Wrong')));
         break;
       case 'target':

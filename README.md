@@ -25,6 +25,15 @@ Students on the same BP share a place (two people on top are both Kings). You ne
 | Wheel of Fortune | 8 BP | Spin the wheel: double your BP, lose some, answer a question, spin again, make someone lose BP, steal BP, free Rage… |
 | The Eternal Brownie | 40 BP | A real brownie baked by the teacher. Shows up in the **Brownies** tab until you mark it handed over. |
 
+### How the effects work
+
+- **Rage and Fireball change every BP a student earns while they are active.** That covers the Give BP buttons, the quick +1 / +5 buttons on the leaderboard, custom amounts, and BP won on the wheel (a "+BP" slice or a correct answer). With Rage, +1 adds 2. With Fireball, +1 adds ½. With both, +1 adds 1.
+- Taking BP away is never doubled or halved.
+- Rage ends on its own after 2 weeks. Fireball ends when you press **End lesson**.
+- A Minus Spell hit stays on the leaderboard until the end of the lesson so everyone can see who did it. An unpaid brownie shows as "Brownie owed" until you mark it handed over.
+- Everything active is listed under **Power-ups in play** on the leaderboard and on the projector. The +1 / +5 buttons show what they will really add (for example "+1 =2").
+- Typing a number into the BP box on the **Students** tab sets the total directly, to fix mistakes. It ignores power-ups.
+
 Prices, Rage length, the Minus Spell amount and every wheel slice can be changed in **Settings**.
 
 ## How to use it

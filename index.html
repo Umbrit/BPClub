@@ -55,6 +55,10 @@
         <span><b class="t-knight">Knight</b> 3rd place</span>
         <span><b class="t-subject">Subject</b> everyone else</span>
       </div>
+      <section class="active-fx" id="activeFx" aria-labelledby="activeTitle">
+        <h3 id="activeTitle">Power-ups in play</h3>
+        <ul id="activeList"></ul>
+      </section>
       <ol class="board" id="board"></ol>
       <div class="empty" id="boardEmpty" hidden>
         <p>No students yet.</p>
@@ -162,7 +166,7 @@
           <h3>Class list <span class="muted" id="studentTotal"></span></h3>
           <div class="table-scroll">
             <table class="students-table">
-              <thead><tr><th>Name</th><th class="num">BP</th><th>Effects</th><th></th></tr></thead>
+              <thead><tr><th>Name</th><th class="num" title="Typing here sets the total directly and ignores power-ups">BP (set total)</th><th>Effects</th><th></th></tr></thead>
               <tbody id="studentRows"></tbody>
             </table>
           </div>
@@ -210,7 +214,7 @@
               <button class="btn small gold" id="wheelAdd" type="button">Add slice</button>
             </div>
           </div>
-          <p class="muted small">Every slice has the same chance. Wheel prizes are not doubled by Rage or halved by Fireball.</p>
+          <p class="muted small">Every slice has the same chance. BP won on the wheel (Win BP, a correct answer) is doubled by Rage and halved by Fireball, like any other BP earned. "Double your BP" and stealing are not.</p>
           <div class="table-scroll">
             <table class="wheel-table">
               <thead><tr><th>Label on wheel</th><th>What happens</th><th class="num">Amount</th><th></th></tr></thead>
