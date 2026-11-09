@@ -1,6 +1,5 @@
 /* BP Club — Brownie Points leaderboard with power-ups.
-   Everything runs in the browser and is saved to localStorage on the teacher's computer.
-   A second "projector" window on the same computer updates live via the storage event. */
+   Everything runs in the browser and is saved to localStorage on the teacher's computer. */
 (() => {
   'use strict';
 
@@ -11,33 +10,31 @@
   const MAX_LOG = 400;
   const MAX_UNDO = 15;
 
-  const DISPLAY = new URLSearchParams(location.search).has('display');
-
   /* ------------------------------------------------------------------ defaults */
 
   const DEFAULT_POWERUPS = [
     { id: 'rage', name: 'Rage', art: '😤', cost: 8, days: 14, enabled: true,
-      desc: (p) => `Earn 2× BP for the next ${p.days} days. Buying again while raging adds another ${p.days} days.` },
+      desc: (p) => `2× BP for ${p.days} days` },
     { id: 'fireball', name: 'Fireball', art: '🔥', cost: 20, enabled: true,
-      desc: () => 'Pick a person. They earn only ½ BP for 1 lesson.' },
+      desc: () => 'Target earns ½ BP for 1 lesson' },
     { id: 'minus', name: 'Minus Spell', art: '🪄', cost: 15, amount: 8, enabled: true,
-      desc: (p) => `Pick a person. They lose ${p.amount} BP straight away.` },
+      desc: (p) => `Target loses ${fmt(p.amount)} BP` },
     { id: 'wheel', name: 'Wheel of Fortune', art: '🎡', cost: 8, enabled: true,
-      desc: () => 'Spin the wheel. Double your BP, lose some, answer a question, spin again, make someone else lose BP and more.' },
-    { id: 'brownie', name: 'The Eternal Brownie', art: '🍫', cost: 40, enabled: true, legend: true,
-      desc: () => 'The ultimate prize: a real brownie, baked by the teacher.' },
+      desc: () => 'Spin for a random prize or penalty' },
+    { id: 'brownie', name: 'The Eternal Brownie', art: '🍫', cost: 40, enabled: true,
+      desc: () => 'A brownie baked by your teacher' },
   ];
 
   const WHEEL_TYPES = {
     gain:     { label: 'Win BP', needsValue: true },
     lose:     { label: 'Lose BP', needsValue: true },
-    doublebp: { label: 'Double your BP (amount = max win)', needsValue: true },
-    question: { label: 'Answer a question (amount = prize)', needsValue: true },
-    spin:     { label: 'Spin again for free', needsValue: false },
-    target:   { label: 'Pick someone to lose BP', needsValue: true },
-    steal:    { label: 'Steal BP from someone', needsValue: true },
-    rage:     { label: 'Free Rage power-up', needsValue: false },
-    nothing:  { label: 'Nothing happens', needsValue: false },
+    doublebp: { label: 'Double BP (up to)', needsValue: true },
+    question: { label: 'Question (prize)', needsValue: true },
+    spin:     { label: 'Spin again', needsValue: false },
+    target:   { label: 'Someone else loses BP', needsValue: true },
+    steal:    { label: 'Steal BP', needsValue: true },
+    rage:     { label: 'Free Rage', needsValue: false },
+    nothing:  { label: 'Nothing', needsValue: false },
   };
 
   const DEFAULT_WHEEL = [
@@ -72,7 +69,6 @@
       effects: [],
       brownies: [],
       log: [],
-      setupDone: false,
     };
   }
 
@@ -220,14 +216,14 @@
   function effectBadges(id) {
     const out = [];
     const r = rageOf(id);
-    if (r) out.push(h('span', { class: 'fx rage', title: `Every BP earned is doubled until ${fmtDate(r.expiresAt)}` }, `😤 Rage ×2 · ${daysLeft(r.expiresAt)}d left`));
+    if (r) out.push(h('span', { class: 'fx rage', title: `Rage: earns 2× BP until ${fmtDate(r.expiresAt)}` }, `😤 ×2 · ${daysLeft(r.expiresAt)}d`));
     const f = fireballOf(id);
-    if (f) out.push(h('span', { class: 'fx fire', title: `Fireballed by ${nameOf(f.by)}: BP earned is halved until the lesson ends` }, '🔥 Fireball ½ · this lesson'));
+    if (f) out.push(h('span', { class: 'fx fire', title: `Fireball from ${nameOf(f.by)}: earns ½ BP this lesson` }, '🔥 ½ BP'));
     const fp = fireballPending(id);
-    if (fp) out.push(h('span', { class: 'fx fire pending', title: `Fireballed by ${nameOf(fp.by)}: BP earned will be halved next lesson` }, '🔥 Fireball ½ · next lesson'));
-    minusHits(id).forEach((m) => out.push(h('span', { class: 'fx minus', title: `Minus Spell cast by ${nameOf(m.by)} this lesson` }, `🪄 −${fmt(m.amount)} by ${nameOf(m.by)}`)));
+    if (fp) out.push(h('span', { class: 'fx fire pending', title: `Fireball from ${nameOf(fp.by)}: earns ½ BP next lesson` }, '🔥 next lesson'));
+    minusHits(id).forEach((m) => out.push(h('span', { class: 'fx minus', title: `Minus Spell from ${nameOf(m.by)}` }, `🪄 −${fmt(m.amount)}`)));
     const owed = browniesOwed(id);
-    if (owed) out.push(h('span', { class: 'fx brownie', title: 'Bought The Eternal Brownie and is waiting for it' }, `🍫 Brownie owed${owed > 1 ? ' ×' + owed : ''}`));
+    if (owed) out.push(h('span', { class: 'fx brownie', title: 'Eternal Brownie owed' }, `🍫 owed${owed > 1 ? ' ×' + owed : ''}`));
     return out.length ? h('span', { class: 'fx-wrap' }, out) : null;
   }
 
@@ -274,10 +270,12 @@
         s.bp = roundHalf(s.bp + delta);
         flash.add(id);
         log(`${s.name} ${delta >= 0 ? 'earned' : 'lost'} ${fmt(Math.abs(delta))} BP${note}${reason ? ' — ' + reason : ''}`, { kind: delta >= 0 ? 'up' : 'down', delta });
-        parts.push(`${s.name} ${signed(delta)}${note}`);
+        parts.push({ text: `${s.name} ${signed(delta)}${note}`, boosted: !!note });
       });
-      const boostedCount = parts.filter((t) => t.includes('(')).length;
-      toast(parts.length > 3 ? `${signed(amount)} BP to ${parts.length} students${boostedCount ? ` (${boostedCount} changed by power-ups, see History)` : ''}` : parts.join(', '));
+      // For big groups, name only the students whose total was changed by a power-up.
+      const many = parts.length > 3;
+      const shown = (many ? parts.filter((x) => x.boosted) : parts).map((x) => x.text).join(', ');
+      toast([many ? `${signed(amount)} BP to ${parts.length} students` : '', shown].filter(Boolean).join(' · '));
     });
   }
 
@@ -341,7 +339,7 @@
 
   /* ------------------------------------------------------------------ teacher mode */
 
-  let teacher = !DISPLAY && (() => { try { return sessionStorage.getItem(SESSION_KEY) === '1'; } catch (e) { return false; } })();
+  let teacher = (() => { try { return sessionStorage.getItem(SESSION_KEY) === '1'; } catch (e) { return false; } })();
 
   function setTeacher(on) {
     teacher = on;
@@ -352,16 +350,16 @@
 
   function askPin() {
     const input = h('input', { id: 'pinInput', class: 'pin-input', type: 'password', inputmode: 'numeric', autocomplete: 'current-password', 'aria-label': 'Teacher PIN' });
-    const err = h('p', { class: 'error', hidden: true }, 'That PIN is not right. Try again.');
-    const hint = state.pinChanged ? null : h('p', { class: 'note small' }, 'The starting PIN is 1234. Change it in Settings once you are logged in.');
+    const err = h('p', { class: 'error', hidden: true }, 'Wrong PIN');
+    const hint = state.pinChanged ? null : h('p', { class: 'muted small' }, 'Default PIN: 1234');
     const tryIt = () => {
-      if (input.value === String(state.pin)) { closeModal(); setTeacher(true); toast('Teacher mode on'); }
+      if (input.value === String(state.pin)) { closeModal(); setTeacher(true); }
       else { err.hidden = false; input.select(); }
     };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryIt(); });
     openModal({
       title: 'Teacher login',
-      body: [h('p', { class: 'muted' }, 'Enter the teacher PIN to give BP and run the shop.'), input, err, hint],
+      body: [input, err, hint],
       actions: [{ label: 'Cancel' }, { label: 'Log in', kind: 'gold', keep: true, onClick: tryIt }],
       focus: input,
     });
@@ -392,7 +390,7 @@
     if (cb) cb();
   }
   function confirmBox(title, message, okLabel, onOk, danger) {
-    openModal({ title, body: h('p', null, message), actions: [{ label: 'Cancel' }, { label: okLabel, kind: danger ? 'danger' : 'gold', onClick: onOk }] });
+    openModal({ title, body: message ? h('p', null, message) : null, actions: [{ label: 'Cancel' }, { label: okLabel, kind: danger ? 'danger' : 'gold', onClick: onOk }] });
   }
 
   let toastTimer;
@@ -411,26 +409,21 @@
   function render() {
     if (cleanEffects()) save();
     document.body.classList.toggle('teacher', teacher);
-    document.body.classList.toggle('display', DISPLAY);
     $('#clubName').textContent = state.clubName;
     document.title = state.clubName;
-    $('#lessonPill').textContent = `Lesson ${state.lesson}`;
     $('#lockBtn').textContent = teacher ? 'Lock' : 'Teacher login';
     const pending = state.brownies.filter((b) => !b.done).length;
     $('#brownieCount').hidden = !pending;
     $('#brownieCount').textContent = pending;
 
     renderBoard();
-    renderActive();
     renderShop();
     renderHistory();
     if (teacher) {
       renderAward();
-      renderBrownies();
       renderStudents();
       renderSettings();
     }
-    if (DISPLAY) $('#ticker').textContent = state.log[0] ? state.log[0].text : '';
     flash.clear();
   }
 
@@ -460,64 +453,45 @@
 
   function renderBoard() {
     const r = ranked();
-    $('#boardEmpty').hidden = r.length > 0;
-    const podium = $('#podium');
-    podium.hidden = r.length === 0;
+    const empty = r.length === 0;
+    $('#boardEmpty').hidden = !empty;
+    $('#podium').hidden = empty;
     const places = [
-      { cls: 'p1', label: '1st', key: 'king', name: 'King' },
-      { cls: 'p2', label: '2nd', key: 'lord', name: 'Lord' },
-      { cls: 'p3', label: '3rd', key: 'knight', name: 'Knight' },
+      { cls: 'p1', key: 'king', name: 'King' },
+      { cls: 'p2', key: 'lord', name: 'Lord' },
+      { cls: 'p3', key: 'knight', name: 'Knight' },
     ];
-    podium.replaceChildren(...places.map((p, i) => {
+    $('#podium').replaceChildren(...places.map((p, i) => {
       const entry = r[i];
-      const titled = entry && entry.title.key !== 'subject';
-      const titleKey = titled ? entry.title.key : p.key;
-      return h('div', { class: `pod ${p.cls}${titled ? '' : ' vacant'}${entry && flash.has(entry.s.id) ? ' bump' : ''}` },
-        h('span', { class: 'place' }, p.label),
-        emblem(titleKey),
-        h('span', { class: 'title' }, titled ? entry.title.name : p.name),
-        h('span', { class: 'name' }, titled ? entry.s.name : 'Unclaimed'),
-        titled ? h('span', { class: 'bp' }, fmt(entry.s.bp), h('small', null, 'BP')) : h('span', { class: 'muted small' }, 'Earn BP to take this seat'),
-        titled ? effectBadges(entry.s.id) : null,
-        titled ? quickButtons(entry.s.id) : null);
+      if (!entry || entry.title.key === 'subject') {
+        return h('div', { class: `pod ${p.cls} ${p.key} vacant` },
+          emblem(p.key), h('span', { class: 'title' }, p.name), h('span', { class: 'name muted' }, '—'));
+      }
+      const { s, title } = entry;
+      return h('div', { class: `pod ${p.cls} ${title.key}${flash.has(s.id) ? ' bump' : ''}` },
+        emblem(title.key),
+        h('span', { class: 'title' }, title.name),
+        h('span', { class: 'name' }, s.name),
+        h('span', { class: 'bp' }, fmt(s.bp), h('small', null, 'BP')),
+        effectBadges(s.id),
+        quickButtons(s.id));
     }));
 
     const rest = r.filter((e, i) => i >= 3 || e.title.key === 'subject');
+    $('#boardCard').hidden = rest.length === 0;
     $('#board').replaceChildren(...rest.map(({ s, rank, title }) =>
-      h('li', { class: `row ${title.key}${flash.has(s.id) ? ' bump' : ''}` },
+      h('li', { class: `row${flash.has(s.id) ? ' bump' : ''}` },
         h('span', { class: 'rank' }, rank),
-        h('span', { class: `rtitle t-${title.key}` }, title.name),
-        h('span', { class: 'rname' }, s.name, effectBadges(s.id)),
+        h('span', { class: 'rname' }, s.name,
+          title.key !== 'subject' ? h('span', { class: `title-tag t-${title.key}` }, title.name) : null,
+          effectBadges(s.id)),
         h('span', { class: 'rbp' }, fmt(s.bp), h('small', null, 'BP')),
         quickButtons(s.id))));
   }
 
-  /** Every effect currently in play, shown under the podium (and on the projector). */
-  function renderActive() {
-    const items = [];
-    const byTime = [...state.effects].sort((a, b) => (a.expiresAt || 0) - (b.expiresAt || 0));
-    byTime.forEach((e) => {
-      const who = nameOf(e.studentId);
-      if (e.type === 'rage' && e.expiresAt > Date.now()) {
-        items.push(h('li', { class: 'fx-item rage' }, h('b', null, `😤 ${who}`), h('span', null, `Rage: earns 2× BP until ${fmtDate(e.expiresAt)} (${daysLeft(e.expiresAt)} days left)`)));
-      } else if (e.type === 'fireball' && e.lesson === state.lesson) {
-        items.push(h('li', { class: 'fx-item fire' }, h('b', null, `🔥 ${who}`), h('span', null, `Fireball from ${nameOf(e.by)}: earns ½ BP until this lesson ends`)));
-      } else if (e.type === 'fireball' && e.lesson > state.lesson) {
-        items.push(h('li', { class: 'fx-item fire' }, h('b', null, `🔥 ${who}`), h('span', null, `Fireball from ${nameOf(e.by)}: will earn ½ BP next lesson`)));
-      } else if (e.type === 'minus' && e.lesson === state.lesson) {
-        items.push(h('li', { class: 'fx-item minus' }, h('b', null, `🪄 ${who}`), h('span', null, `hit by ${nameOf(e.by)}'s Minus Spell: lost ${fmt(e.amount)} BP`)));
-      }
-    });
-    state.brownies.filter((b) => !b.done).forEach((b) => {
-      items.push(h('li', { class: 'fx-item brownie' }, h('b', null, `🍫 ${student(b.studentId)?.name || b.name}`), h('span', null, `is owed an Eternal Brownie (bought ${fmtDate(b.ts)})`)));
-    });
-    $('#activeFx').hidden = state.students.length === 0;
-    $('#activeList').replaceChildren(...(items.length ? items : [h('li', { class: 'muted' }, 'No power-ups active right now. Visit the Power-up Shop to change that.')]));
-  }
-
   /* ---- Give BP tab */
   const selected = new Set();
-  const PLUS = [1, 2, 3, 5, 10, 20];
+  const PLUS = [1, 2, 3, 5, 10];
   const MINUS = [1, 2, 3, 5, 10];
 
   function renderAward() {
@@ -529,16 +503,8 @@
         s.name,
         rageOf(s.id) ? h('span', { class: 'tag rage', title: 'Rage: earns double' }, '×2') : null,
         fireballOf(s.id) ? h('span', { class: 'tag fire', title: 'Fireball: earns half this lesson' }, '½') : null,
-        h('span', { class: 'cbp' }, fmt(s.bp)))) : [h('p', { class: 'muted' }, 'Add students first in the Students tab.')]));
-    $('#selCount').textContent = `(${selected.size} picked)`;
-
-    const picked = [...selected].map(student).filter(Boolean);
-    const affected = picked.filter((s) => boostNote(s.id));
-    const prev = $('#awardPreview');
-    if (!picked.length) prev.replaceChildren('Nobody picked yet.');
-    else prev.replaceChildren(
-      h('span', null, `Picked: ${picked.map((s) => s.name).join(', ')}`),
-      ...affected.map((s) => h('span', { class: 'preview-boost' }, `${s.name} has ${boostNote(s.id)}: +5 gives +${fmt(boosted(s.id, 5).delta)}, +1 gives +${fmt(boosted(s.id, 1).delta)}`)));
+        h('span', { class: 'cbp' }, fmt(s.bp)))) : [h('p', { class: 'muted' }, 'No students yet.')]));
+    $('#selCount').textContent = selected.size ? `· ${selected.size}` : '';
     const disabled = selected.size === 0;
     document.querySelectorAll('#plusAmounts button, #minusAmounts button, #customForm button').forEach((b) => { b.disabled = disabled; });
   }
@@ -548,19 +514,26 @@
     $('#minusAmounts').replaceChildren(...MINUS.map((n) => h('button', { type: 'button', class: 'btn amt minus', onclick: () => award([...selected], -n, $('#awardReason').value.trim()) }, `−${n}`)));
   }
 
-  /* ---- Shop */
+  /* ---- Power-ups (plus the brownies still owed) */
   function renderShop() {
-    $('#shopHint').textContent = teacher
-      ? 'Press Buy, pick who is paying, and the BP comes off their total.'
-      : 'Spend your Brownie Points. Ask the teacher to buy a power-up for you.';
     $('#shop').replaceChildren(...DEFAULT_POWERUPS.map((meta) => {
       const p = pu(meta.id);
-      return h('article', { class: `item${meta.legend ? ' legend' : ''}${p.enabled ? '' : ' disabled'}` },
-        h('span', { class: 'price' }, fmt(p.cost), h('small', null, ' BP')),
-        h('span', { class: 'art', 'aria-hidden': 'true' }, meta.art),
-        h('h3', null, meta.name),
-        h('p', null, p.enabled ? meta.desc(p) : 'Switched off by the teacher for now.'),
+      return h('article', { class: `card item${p.enabled ? '' : ' off'}` },
+        h('div', { class: 'item-head' },
+          h('span', { class: 'art', 'aria-hidden': 'true' }, meta.art),
+          h('h3', null, meta.name),
+          h('span', { class: 'price' }, `${fmt(p.cost)} BP`)),
+        h('p', null, p.enabled ? meta.desc(p) : 'Not available'),
         teacher && p.enabled ? h('button', { type: 'button', class: 'btn gold', onclick: () => openBuy(meta.id) }, meta.id === 'wheel' ? 'Buy a spin' : 'Buy') : null);
+    }));
+
+    const pending = state.brownies.filter((b) => !b.done).sort((a, b) => a.ts - b.ts);
+    $('#brownieCard').hidden = pending.length === 0;
+    $('#browniePending').replaceChildren(...pending.map((b) => {
+      const who = student(b.studentId)?.name || b.name;
+      return h('li', null,
+        h('span', null, h('b', null, who), h('span', { class: 'muted' }, ` · ${fmtDate(b.ts)}`)),
+        h('button', { type: 'button', class: 'btn small gold', onclick: () => commit(() => { b.done = true; b.doneTs = Date.now(); log(`🍫 Brownie handed to ${who}`, { kind: 'power' }); }) }, 'Handed over'));
     }));
   }
 
@@ -576,27 +549,26 @@
     const p = pu(powerId);
     if (!state.students.length) { toast('Add students first'); return; }
     const needsTarget = powerId === 'fireball' || powerId === 'minus';
-    const buyerSel = studentSelect('buyBuyer', { minBp: p.cost, placeholder: 'Who is buying?' });
+    const buyerSel = studentSelect('buyBuyer', { minBp: p.cost, placeholder: 'Pick a buyer' });
     const targetWrap = h('div', { class: 'field' });
     const err = h('p', { class: 'error', hidden: true });
     let whenNow = true;
-    const when = powerId === 'fireball' ? h('div', { class: 'field' }, h('span', null, 'When does it hit?'),
+    const when = powerId === 'fireball' ? h('div', { class: 'field' }, h('span', null, 'When'),
       h('div', { class: 'radio-row' },
-        h('label', null, h('input', { type: 'radio', name: 'fbWhen', value: 'now', checked: true, onchange: () => { whenNow = true; } }), `This lesson (${state.lesson})`),
-        h('label', null, h('input', { type: 'radio', name: 'fbWhen', value: 'next', onchange: () => { whenNow = false; } }), `Next lesson (${state.lesson + 1})`))) : null;
+        h('label', null, h('input', { type: 'radio', name: 'fbWhen', value: 'now', checked: true, onchange: () => { whenNow = true; } }), 'This lesson'),
+        h('label', null, h('input', { type: 'radio', name: 'fbWhen', value: 'next', onchange: () => { whenNow = false; } }), 'Next lesson'))) : null;
 
     const fillTarget = () => {
       if (!needsTarget) return;
-      targetWrap.replaceChildren(h('span', null, powerId === 'fireball' ? 'Who gets fireballed?' : 'Who loses BP?'),
-        studentSelect('buyTarget', { exclude: buyerSel.value, placeholder: 'Pick a victim' }));
+      targetWrap.replaceChildren(h('span', null, 'Target'),
+        studentSelect('buyTarget', { exclude: buyerSel.value, placeholder: 'Pick a target' }));
     };
     buyerSel.addEventListener('change', fillTarget);
     fillTarget();
 
     openModal({
-      title: `${meta.art} ${meta.name} — ${fmt(p.cost)} BP`,
+      title: `${meta.art} ${meta.name} · ${fmt(p.cost)} BP`,
       body: [
-        h('p', { class: 'muted' }, meta.desc(p)),
         h('label', { class: 'field' }, h('span', null, 'Buyer'), buyerSel),
         needsTarget ? targetWrap : null,
         when,
@@ -607,8 +579,8 @@
         onClick: () => {
           const buyerId = buyerSel.value;
           const targetId = needsTarget ? $('#buyTarget').value : null;
-          if (!buyerId) { err.textContent = 'Pick who is buying.'; err.hidden = false; return; }
-          if (needsTarget && !targetId) { err.textContent = 'Pick a target.'; err.hidden = false; return; }
+          if (!buyerId) { err.textContent = 'Pick a buyer'; err.hidden = false; return; }
+          if (needsTarget && !targetId) { err.textContent = 'Pick a target'; err.hidden = false; return; }
           const ok = buy(buyerId, powerId, { targetId, when: whenNow ? 'now' : 'next' });
           if (!ok) return;
           closeModal();
@@ -658,9 +630,8 @@
     const slices = state.wheel.filter((s) => s.label);
     const canvas = h('canvas', { 'aria-label': 'Wheel of Fortune' });
     const stage = h('div', { class: 'wheel-stage' }, h('div', { class: 'wheel-pointer' }), canvas, h('div', { class: 'wheel-hub' }));
-    const result = h('div', { class: 'wheel-result', 'aria-live': 'polite' },
-      h('p', { class: 'muted' }, `${nameOf(spinnerId)} is spinning…`));
-    const spinBtn = h('button', { type: 'button', class: 'btn gold', id: 'spinBtn' }, 'SPIN!');
+    const result = h('div', { class: 'wheel-result', 'aria-live': 'polite' });
+    const spinBtn = h('button', { type: 'button', class: 'btn gold', id: 'spinBtn' }, 'Spin');
     result.append(spinBtn);
     canvas.style.transition = 'none';
     canvas.style.transform = `rotate(${wheelRotation}deg)`;
@@ -692,7 +663,7 @@
     spinBtn.addEventListener('click', spin);
 
     openModal({
-      title: `🎡 Wheel of Fortune — ${nameOf(spinnerId)}`,
+      title: `🎡 Wheel of Fortune · ${nameOf(spinnerId)}`,
       body: [stage, result],
       wide: true,
       closable: false,
@@ -742,14 +713,14 @@
         break;
       case 'nothing':
         commit(() => log(`🎡 ${name} landed on "${slice.label}" — nothing happens`, { kind: 'power' }));
-        finish(`${slice.label} Nothing happens.`);
+        finish('Nothing happens');
         break;
       case 'question':
         result.replaceChildren(header,
-          h('p', null, `Ask ${name} a question. Correct answer wins ${fmt(boosted(spinnerId, v).delta)} BP${boosted(spinnerId, v).note}.`),
+          h('p', null, `Ask ${name} a question. Correct: +${fmt(boosted(spinnerId, v).delta)} BP${boosted(spinnerId, v).note}`),
           h('div', { class: 'btn-row' },
             h('button', { type: 'button', class: 'btn good', onclick: () => { const { delta, note } = boosted(spinnerId, v); commit(() => change(spinnerId, delta, `🎡 ${name} answered the wheel question correctly: +{n} BP${note}`)); finish(`Correct! ${name} +${fmt(delta)} BP${note}`); } }, 'Correct'),
-            h('button', { type: 'button', class: 'btn danger', onclick: () => { commit(() => log(`🎡 ${name} got the wheel question wrong`, { kind: 'power' })); finish(`Wrong answer. No BP this time.`); } }, 'Wrong')));
+            h('button', { type: 'button', class: 'btn danger', onclick: () => { commit(() => log(`🎡 ${name} got the wheel question wrong`, { kind: 'power' })); finish('Wrong answer'); } }, 'Wrong')));
         break;
       case 'target':
       case 'steal': {
@@ -769,11 +740,10 @@
             });
             finish(`${name} steals ${fmt(taken)} BP from ${victim}!`);
           }
-        } }, slice.type === 'target' ? 'Make them lose BP' : 'Steal');
+        } }, slice.type === 'target' ? `−${fmt(v)} BP` : 'Steal');
         result.replaceChildren(header,
-          h('p', null, slice.type === 'target' ? `${name}, pick someone to lose ${fmt(v)} BP.` : `${name}, pick someone to steal ${fmt(v)} BP from.`),
-          h('div', { class: 'custom-amount' }, h('label', { class: 'field' }, h('span', null, 'Victim'), sel), go),
-          h('button', { type: 'button', class: 'btn small ghost', onclick: () => { commit(() => log(`🎡 ${name} landed on "${slice.label}" but nobody was picked`, { kind: 'power' })); finish('Nobody picked. No effect.'); } }, 'Skip'));
+          h('div', { class: 'inline-form' }, sel, go),
+          h('button', { type: 'button', class: 'btn small ghost', onclick: () => { commit(() => log(`🎡 ${name} landed on "${slice.label}" but nobody was picked`, { kind: 'power' })); finish('Skipped'); } }, 'Skip'));
         break;
       }
       default:
@@ -781,35 +751,21 @@
     }
   }
 
-  /* ---- Brownies */
-  function renderBrownies() {
-    const pending = state.brownies.filter((b) => !b.done).sort((a, b) => a.ts - b.ts);
-    const done = state.brownies.filter((b) => b.done).sort((a, b) => b.doneTs - a.doneTs);
-    $('#browniePending').replaceChildren(...(pending.length ? pending.map((b) => h('li', null,
-      h('span', null, h('span', { class: 'who' }, student(b.studentId)?.name || b.name), h('span', { class: 'muted' }, ` · bought ${new Date(b.ts).toLocaleDateString()}`)),
-      h('button', { type: 'button', class: 'btn small gold', onclick: () => commit(() => { b.done = true; b.doneTs = Date.now(); log(`🍫 Brownie handed to ${student(b.studentId)?.name || b.name}`, { kind: 'power' }); }) }, 'Mark handed over')))
-      : [h('li', { class: 'muted' }, 'No brownies owed. Your oven is safe for now.')]));
-    $('#brownieDone').replaceChildren(...(done.length ? done.slice(0, 50).map((b) => h('li', null,
-      h('span', null, h('span', { class: 'who' }, student(b.studentId)?.name || b.name), h('span', { class: 'muted' }, ` · handed over ${new Date(b.doneTs).toLocaleDateString()}`))))
-      : [h('li', { class: 'muted' }, 'None yet.')]));
-  }
-
   /* ---- Students */
   function renderStudents() {
     const list = [...state.students].sort((a, b) => a.name.localeCompare(b.name));
-    $('#studentTotal').textContent = `(${list.length})`;
+    $('#studentTotal').textContent = list.length ? `· ${list.length}` : '';
     $('#studentRows').replaceChildren(...(list.length ? list.map((s) => h('tr', null,
       h('td', null, h('input', { type: 'text', id: `name-${s.id}`, value: s.name, 'aria-label': `Name for ${s.name}`,
         onchange: (e) => { const v = e.target.value.trim(); if (!v || v === s.name) { e.target.value = s.name; return; } commit(() => { log(`${s.name} renamed to ${v}`, { kind: 'admin' }); s.name = v; }); } })),
       h('td', { class: 'num' }, h('input', { type: 'number', step: '0.5', min: '0', id: `bp-${s.id}`, value: s.bp, 'aria-label': `BP for ${s.name}`,
         onchange: (e) => { const v = Math.max(0, roundHalf(num(e.target.value, s.bp))); if (v === s.bp) return; commit(() => { log(`${s.name}'s BP set to ${fmt(v)} (was ${fmt(s.bp)})`, { kind: 'admin' }); s.bp = v; }); } })),
-      h('td', null, effectBadges(s.id) || h('span', { class: 'muted small' }, '—')),
       h('td', { class: 'num' }, h('button', { type: 'button', class: 'btn small ghost', onclick: () => confirmBox('Remove student?', `Remove ${s.name} and their ${fmt(s.bp)} BP from the club?`, 'Remove', () => commit(() => {
         state.students = state.students.filter((x) => x.id !== s.id);
         state.effects = state.effects.filter((e) => e.studentId !== s.id);
         log(`${s.name} was removed from the club`, { kind: 'admin' });
       }), true) }, 'Remove'))))
-      : [h('tr', null, h('td', { colspan: '4', class: 'muted' }, 'No students yet. Add some on the left.'))]));
+      : [h('tr', null, h('td', { colspan: '3', class: 'muted' }, 'No students yet.'))]));
   }
 
   /* ---- History */
@@ -819,7 +775,7 @@
       h('time', { datetime: new Date(l.ts).toISOString() }, new Date(l.ts).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })),
       h('span', null, l.text),
       l.delta ? h('span', { class: `delta ${l.delta > 0 ? 'up' : 'down'}` }, signed(l.delta)) : h('span')))
-      : [h('li', { class: 'muted' }, h('span'), h('span', null, 'Nothing has happened yet.'), h('span'))]));
+      : [h('li', { class: 'muted' }, h('span'), h('span', null, 'Nothing yet.'), h('span'))]));
     $('#undoBtn').disabled = undoStack.length === 0;
   }
 
@@ -828,23 +784,33 @@
     const nameInput = $('#setName');
     if (document.activeElement !== nameInput) nameInput.value = state.clubName;
 
+    const numInput = (id, value, min, step, label, apply) =>
+      h('input', { type: 'number', id, min, step, value, 'aria-label': label, onchange: (e) => apply(e.target.value) });
     $('#setPowerups').replaceChildren(...DEFAULT_POWERUPS.flatMap((meta) => {
       const p = pu(meta.id);
-      const rows = [h('div', { class: 'pu-row' },
-        h('span', { class: 'pu-name' }, `${meta.art} ${meta.name}`,
-          h('small', null, h('label', null, h('input', { type: 'checkbox', checked: p.enabled, onchange: (e) => commit(() => { p.enabled = e.target.checked; log(`${meta.name} ${p.enabled ? 'switched on' : 'switched off'}`, { kind: 'admin' }); }) }), ' available in shop'))),
-        h('input', { type: 'number', id: `cost-${meta.id}`, min: '0', step: '0.5', value: p.cost, 'aria-label': `${meta.name} price`,
-          onchange: (e) => { const v = Math.max(0, roundHalf(num(e.target.value, p.cost))); commit(() => { log(`${meta.name} price changed to ${fmt(v)} BP`, { kind: 'admin' }); p.cost = v; }); } }))];
-      if (meta.id === 'rage') rows.push(h('div', { class: 'pu-row' }, h('label', { class: 'pu-name', for: 'rage-days' }, h('small', null, 'Rage lasts (days)')),
-        h('input', { type: 'number', id: 'rage-days', min: '1', step: '1', value: p.days, onchange: (e) => { const v = Math.max(1, Math.round(num(e.target.value, p.days))); commit(() => { p.days = v; log(`Rage now lasts ${v} days`, { kind: 'admin' }); }); } })));
-      if (meta.id === 'minus') rows.push(h('div', { class: 'pu-row' }, h('label', { class: 'pu-name', for: 'minus-amt' }, h('small', null, 'Minus Spell takes (BP)')),
-        h('input', { type: 'number', id: 'minus-amt', min: '0', step: '0.5', value: p.amount, onchange: (e) => { const v = Math.max(0, roundHalf(num(e.target.value, p.amount))); commit(() => { p.amount = v; log(`Minus Spell now takes ${fmt(v)} BP`, { kind: 'admin' }); }); } })));
+      const rows = [h('tr', null,
+        h('td', null, `${meta.art} ${meta.name}`),
+        h('td', { class: 'num' }, numInput(`cost-${meta.id}`, p.cost, '0', '0.5', `${meta.name} price`, (val) => {
+          const v = Math.max(0, roundHalf(num(val, p.cost)));
+          commit(() => { log(`${meta.name} price changed to ${fmt(v)} BP`, { kind: 'admin' }); p.cost = v; });
+        })),
+        h('td', { class: 'num' }, h('input', { type: 'checkbox', id: `on-${meta.id}`, checked: p.enabled, 'aria-label': `${meta.name} available`,
+          onchange: (e) => commit(() => { p.enabled = e.target.checked; log(`${meta.name} ${p.enabled ? 'switched on' : 'switched off'}`, { kind: 'admin' }); }) })))];
+      if (meta.id === 'rage') rows.push(h('tr', { class: 'sub' }, h('td', null, 'Days'),
+        h('td', { class: 'num' }, numInput('rage-days', p.days, '1', '1', 'Rage length in days', (val) => {
+          const v = Math.max(1, Math.round(num(val, p.days)));
+          commit(() => { p.days = v; log(`Rage now lasts ${v} days`, { kind: 'admin' }); });
+        })), h('td')));
+      if (meta.id === 'minus') rows.push(h('tr', { class: 'sub' }, h('td', null, 'BP taken'),
+        h('td', { class: 'num' }, numInput('minus-amt', p.amount, '0', '0.5', 'Minus Spell amount', (val) => {
+          const v = Math.max(0, roundHalf(num(val, p.amount)));
+          commit(() => { p.amount = v; log(`Minus Spell now takes ${fmt(v)} BP`, { kind: 'admin' }); });
+        })), h('td')));
       return rows;
     }));
 
     $('#wheelRows').replaceChildren(...state.wheel.map((sl, i) => h('tr', null,
-      h('td', null, h('span', { class: 'swatch', style: `background:${WHEEL_COLORS[i % WHEEL_COLORS.length]}` }),
-        h('input', { type: 'text', id: `wl-${i}`, value: sl.label, maxlength: '28', 'aria-label': 'Slice label', onchange: (e) => commit(() => { sl.label = e.target.value.trim() || 'Slice'; }) })),
+      h('td', null, h('input', { type: 'text', id: `wl-${i}`, value: sl.label, maxlength: '28', 'aria-label': 'Slice label', onchange: (e) => commit(() => { sl.label = e.target.value.trim() || 'Slice'; }) })),
       h('td', null, h('select', { id: `wt-${i}`, 'aria-label': 'What happens', onchange: (e) => commit(() => { sl.type = e.target.value; }) },
         Object.entries(WHEEL_TYPES).map(([k, t]) => h('option', { value: k, selected: sl.type === k }, t.label)))),
       h('td', { class: 'num' }, WHEEL_TYPES[sl.type]?.needsValue
@@ -861,28 +827,15 @@
     try { sessionStorage.setItem('bpclub.tab', name); } catch (e) { /* ignore */ }
   }
 
-  /* ------------------------------------------------------------------ first run */
+  /* ------------------------------------------------------------------ example class */
 
-  function firstRun() {
-    openModal({
-      title: `Welcome to ${state.clubName}`,
-      body: [
-        h('p', null, 'This site keeps your class\'s Brownie Points on this computer. Students can watch the leaderboard; only the teacher (with the PIN) can give BP and buy power-ups.'),
-        h('p', { class: 'note small' }, 'The starting teacher PIN is 1234. Change it in Settings.'),
-        h('p', null, 'Do you want to try it with an example class first? You can delete them later in Settings.'),
-      ],
-      actions: [
-        { label: 'Start with an empty club', onClick: () => { state.setupDone = true; save(); setTeacher(true); showTab('students'); } },
-        { label: 'Load example class', kind: 'gold', onClick: () => {
-          state.setupDone = true;
-          const pts = [34, 27, 22, 19, 15, 12, 11, 9, 7, 5, 3, 0];
-          state.students = EXAMPLE_NAMES.map((n, i) => ({ id: uid(), name: n, bp: pts[i], createdAt: Date.now() }));
-          state.effects.push({ id: uid(), type: 'rage', studentId: state.students[1].id, expiresAt: Date.now() + 9 * DAY });
-          state.effects.push({ id: uid(), type: 'fireball', studentId: state.students[0].id, by: state.students[3].id, lesson: state.lesson });
-          log('Example class loaded', { kind: 'admin' });
-          save(); render();
-        } },
-      ],
+  function loadExample() {
+    commit(() => {
+      const pts = [34, 27, 22, 19, 15, 12, 11, 9, 7, 5, 3, 0];
+      state.students = EXAMPLE_NAMES.map((n, i) => ({ id: uid(), name: n, bp: pts[i], createdAt: Date.now() }));
+      state.effects.push({ id: uid(), type: 'rage', studentId: state.students[1].id, expiresAt: Date.now() + 9 * DAY });
+      state.effects.push({ id: uid(), type: 'fireball', studentId: state.students[0].id, by: state.students[3].id, lesson: state.lesson });
+      log('Example class loaded', { kind: 'admin' });
     });
   }
 
@@ -891,16 +844,13 @@
   function wire() {
     document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
 
-    $('#lockBtn').addEventListener('click', () => { if (teacher) { setTeacher(false); toast('Locked. Students can look but not touch.'); } else askPin(); });
-    $('#displayBtn').addEventListener('click', () => {
-      const url = location.pathname + '?display';
-      const w = window.open(url, 'bpclub-display', 'width=1280,height=800');
-      if (!w) location.href = url;
-    });
+    $('#lockBtn').addEventListener('click', () => { if (teacher) setTeacher(false); else askPin(); });
     $('#endLessonBtn').addEventListener('click', () => {
       const fb = state.effects.filter((e) => e.type === 'fireball' && e.lesson === state.lesson).map((e) => nameOf(e.studentId));
-      confirmBox(`End lesson ${state.lesson}?`, `This starts lesson ${state.lesson + 1}.${fb.length ? ` Fireball wears off for ${fb.join(', ')}.` : ''} Next-lesson Fireballs become active.`, 'End lesson', endLesson);
+      confirmBox(`End lesson ${state.lesson}?`, fb.length ? `Fireball wears off for ${fb.join(', ')}.` : '', 'End lesson', endLesson);
     });
+    $('#emptyAdd').addEventListener('click', () => showTab('students'));
+    $('#emptyExample').addEventListener('click', loadExample);
 
     $('#modalClose').addEventListener('click', closeModal);
     $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal' && $('#modal').dataset.closable) closeModal(); });
@@ -926,12 +876,11 @@
       e.preventDefault();
       const names = $('#addNames').value.split(/[\n,;\t]+/).map((s) => s.trim()).filter(Boolean);
       if (!names.length) { toast('Type at least one name'); return; }
-      const start = Math.max(0, roundHalf(num($('#addStart').value, 0)));
       const existing = new Set(state.students.map((s) => s.name.toLowerCase()));
       const fresh = [...new Set(names)].filter((n) => !existing.has(n.toLowerCase()));
       if (!fresh.length) { toast('Those names are already in the club'); return; }
       commit(() => {
-        fresh.forEach((n) => state.students.push({ id: uid(), name: n.slice(0, 40), bp: start, createdAt: Date.now() }));
+        fresh.forEach((n) => state.students.push({ id: uid(), name: n.slice(0, 40), bp: 0, createdAt: Date.now() }));
         log(`Added ${fresh.length} student${fresh.length > 1 ? 's' : ''}: ${fresh.join(', ')}`, { kind: 'admin' });
       });
       $('#addNames').value = '';
@@ -952,7 +901,7 @@
       toast('PIN changed');
     });
     $('#wheelAdd').addEventListener('click', () => commit(() => { state.wheel.push({ label: '+3 BP', type: 'gain', value: 3 }); }));
-    $('#wheelReset').addEventListener('click', () => confirmBox('Restore default slices?', 'This replaces your wheel slices with the original set.', 'Restore', () => commit(() => { state.wheel = DEFAULT_WHEEL.map((s) => ({ ...s })); })));
+    $('#wheelReset').addEventListener('click', () => confirmBox('Reset wheel slices?', '', 'Reset', () => commit(() => { state.wheel = DEFAULT_WHEEL.map((s) => ({ ...s })); })));
 
     $('#exportBtn').addEventListener('click', () => {
       const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -969,8 +918,8 @@
         try {
           const data = JSON.parse(reader.result);
           if (!data || !Array.isArray(data.students)) throw new Error('bad');
-          confirmBox('Restore this backup?', `It has ${data.students.length} students. Everything currently on this computer will be replaced.`, 'Restore', () => {
-            commit(() => { state = normalise(data); state.setupDone = true; log('Restored from backup', { kind: 'admin' }); });
+          confirmBox('Restore this backup?', `${data.students.length} students. This replaces everything here.`, 'Restore', () => {
+            commit(() => { state = normalise(data); log('Restored from backup', { kind: 'admin' }); });
             toast('Backup restored');
           });
         } catch (err) { toast('That file is not a BP Club backup'); }
@@ -978,7 +927,7 @@
       };
       reader.readAsText(file);
     });
-    $('#resetPointsBtn').addEventListener('click', () => confirmBox('Reset all BP?', 'Every student goes back to 0 BP and all Rage and Fireball effects are cleared. Students, prices and brownie orders stay.', 'Reset BP', () => commit(() => {
+    $('#resetPointsBtn').addEventListener('click', () => confirmBox('Set all BP to 0?', 'Power-up effects are cleared too.', 'Set to 0', () => commit(() => {
       state.students.forEach((s) => { s.bp = 0; });
       state.effects = [];
       log('All BP reset to 0 for a fresh start', { kind: 'admin' });
@@ -987,19 +936,19 @@
       const input = h('input', { type: 'text', id: 'wipeConfirm', placeholder: 'Type DELETE', autocomplete: 'off' });
       openModal({
         title: 'Delete everything?',
-        body: [h('p', null, 'This removes every student, all BP, history and settings from this computer. Download a backup first if you might want it back.'), h('label', { class: 'field' }, h('span', null, 'Type DELETE to confirm'), input)],
+        body: [h('p', null, 'Removes all students, BP, history and settings.'), h('label', { class: 'field' }, h('span', null, 'Type DELETE to confirm'), input)],
         actions: [{ label: 'Cancel' }, { label: 'Delete everything', kind: 'danger', keep: true, onClick: () => {
           if (input.value.trim().toUpperCase() !== 'DELETE') { toast('Type DELETE to confirm'); return; }
           const pin = state.pin, pinChanged = state.pinChanged;
           state = freshState(); state.pin = pin; state.pinChanged = pinChanged;
           undoStack = [];
-          save(); closeModal(); render(); firstRun();
+          save(); closeModal(); render();
         } }],
         focus: input,
       });
     });
 
-    // Live updates between windows (e.g. projector window) on the same computer
+    // Keep two open tabs on the same computer in sync
     window.addEventListener('storage', (e) => {
       if (e.key !== STORE_KEY || !e.newValue) return;
       try {
@@ -1019,15 +968,9 @@
   /* ------------------------------------------------------------------ boot */
 
   wire();
-  if (DISPLAY) {
-    showTab('board');
-    document.addEventListener('dblclick', () => document.documentElement.requestFullscreen?.().catch(() => {}));
-  } else {
-    let tab = 'board';
-    try { tab = sessionStorage.getItem('bpclub.tab') || 'board'; } catch (e) { /* ignore */ }
-    showTab(tab);
-  }
+  const savedTab = (() => { try { return sessionStorage.getItem('bpclub.tab'); } catch (e) { return null; } })();
+  const tabBtn = savedTab && document.querySelector(`.tab[data-tab="${savedTab}"]`);
+  showTab(tabBtn && (teacher || !tabBtn.classList.contains('teacher-only')) ? savedTab : 'board');
   render();
   if (!saveOk) toast('This browser is blocking storage, so BP will not be saved. Try a normal (not private) window.');
-  if (!DISPLAY && !state.setupDone && !state.students.length) firstRun();
 })();

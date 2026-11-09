@@ -4,10 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>BP Club</title>
-  <meta name="description" content="BP Club: a classroom Brownie Points leaderboard with power-ups, run from the teacher's computer.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700;800&family=Cinzel:wght@600;700;900&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700;800&family=Cinzel:wght@700;900&display=swap">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,27 +16,18 @@
         <svg class="crest" viewBox="0 0 64 64" aria-hidden="true">
           <path d="M8 22 L18 34 L32 12 L46 34 L56 22 L52 50 H12 Z" fill="var(--gold)" stroke="var(--gold-deep)" stroke-width="2" stroke-linejoin="round"/>
           <rect x="12" y="50" width="40" height="7" rx="2" fill="var(--gold-deep)"/>
-          <circle cx="32" cy="12" r="4" fill="var(--gold-hi)"/>
-          <circle cx="8" cy="22" r="3.5" fill="var(--gold-hi)"/>
-          <circle cx="56" cy="22" r="3.5" fill="var(--gold-hi)"/>
         </svg>
-        <div>
-          <h1 id="clubName">BP Club</h1>
-          <p class="tagline">Brownie Points</p>
-        </div>
+        <h1 id="clubName">BP Club</h1>
       </div>
       <div class="top-actions">
-        <span class="lesson-pill" id="lessonPill" title="Fireball lasts for one lesson">Lesson 1</span>
         <button class="btn ghost teacher-only" id="endLessonBtn" type="button">End lesson</button>
-        <button class="btn ghost" id="displayBtn" type="button" title="Open a big-screen leaderboard for the projector">Projector view</button>
         <button class="btn gold" id="lockBtn" type="button">Teacher login</button>
       </div>
     </div>
-    <nav class="tabs" id="tabs" aria-label="Sections">
+    <nav class="tabs" aria-label="Sections">
       <button type="button" data-tab="board" class="tab active">Leaderboard</button>
       <button type="button" data-tab="award" class="tab teacher-only">Give BP</button>
-      <button type="button" data-tab="shop" class="tab">Power-ups</button>
-      <button type="button" data-tab="brownies" class="tab teacher-only">Brownies <span class="count" id="brownieCount" hidden>0</span></button>
+      <button type="button" data-tab="shop" class="tab">Power-ups<span class="count teacher-only" id="brownieCount" title="Brownies owed" hidden>0</span></button>
       <button type="button" data-tab="students" class="tab teacher-only">Students</button>
       <button type="button" data-tab="history" class="tab">History</button>
       <button type="button" data-tab="settings" class="tab teacher-only">Settings</button>
@@ -45,128 +35,72 @@
   </header>
 
   <main class="wrap">
-    <!-- LEADERBOARD -->
-    <section id="tab-board" class="panel active" aria-labelledby="boardTitle">
-      <h2 id="boardTitle" class="sr-only">Leaderboard</h2>
+    <section id="tab-board" class="panel active" aria-label="Leaderboard">
       <div class="podium" id="podium"></div>
-      <div class="ranks-legend">
-        <span><b class="t-king">King</b> 1st place</span>
-        <span><b class="t-lord">Lord</b> 2nd place</span>
-        <span><b class="t-knight">Knight</b> 3rd place</span>
-        <span><b class="t-subject">Subject</b> everyone else</span>
+      <div class="board-card" id="boardCard">
+        <h2 class="list-head">Subjects</h2>
+        <ol class="board" id="board"></ol>
       </div>
-      <section class="active-fx" id="activeFx" aria-labelledby="activeTitle">
-        <h3 id="activeTitle">Power-ups in play</h3>
-        <ul id="activeList"></ul>
-      </section>
-      <ol class="board" id="board"></ol>
       <div class="empty" id="boardEmpty" hidden>
         <p>No students yet.</p>
-        <p class="muted">Log in as the teacher, open <b>Students</b> and add your class.</p>
+        <div class="btn-row teacher-only">
+          <button class="btn gold" id="emptyAdd" type="button">Add students</button>
+          <button class="btn ghost" id="emptyExample" type="button">Load example class</button>
+        </div>
       </div>
     </section>
 
-    <!-- GIVE BP -->
-    <section id="tab-award" class="panel" aria-labelledby="awardTitle">
-      <div class="panel-head">
-        <h2 id="awardTitle">Give Brownie Points</h2>
-        <p class="muted">Pick one or more students, then tap an amount. Rage doubles what they earn; Fireball halves it.</p>
-      </div>
+    <section id="tab-award" class="panel" aria-label="Give BP">
       <div class="award-layout">
         <div class="card">
-          <div class="row-between">
-            <h3>Students <span class="muted" id="selCount">(0 picked)</span></h3>
+          <div class="card-head">
+            <h2>Students <span id="selCount"></span></h2>
             <div class="btn-row">
-              <button class="btn small ghost" id="selAll" type="button">Pick all</button>
-              <button class="btn small ghost" id="selNone" type="button">Clear</button>
+              <button class="btn small ghost" id="selAll" type="button">All</button>
+              <button class="btn small ghost" id="selNone" type="button">None</button>
             </div>
           </div>
           <div class="chips" id="awardChips"></div>
         </div>
         <div class="card award-controls">
-          <label class="field">
-            <span>Reason (optional)</span>
-            <input id="awardReason" type="text" maxlength="80" placeholder="e.g. Great answer, homework, helping others" list="reasonList">
-            <datalist id="reasonList">
-              <option value="Great answer"></option>
-              <option value="Homework"></option>
-              <option value="Helping others"></option>
-              <option value="Excellent effort"></option>
-              <option value="Quiz winner"></option>
-              <option value="Off task"></option>
-            </datalist>
-          </label>
-          <div>
-            <span class="label">Give</span>
-            <div class="amounts" id="plusAmounts"></div>
-          </div>
-          <div>
-            <span class="label">Take away</span>
-            <div class="amounts" id="minusAmounts"></div>
-          </div>
-          <form class="custom-amount" id="customForm">
-            <label class="field">
-              <span>Custom amount</span>
-              <input id="customAmount" type="number" step="0.5" placeholder="e.g. 7 or -3">
-            </label>
+          <div class="amounts" id="plusAmounts"></div>
+          <div class="amounts" id="minusAmounts"></div>
+          <form class="inline-form" id="customForm">
+            <input id="customAmount" type="number" step="0.5" placeholder="Other amount" aria-label="Other amount">
             <button class="btn gold" type="submit">Apply</button>
           </form>
-          <p class="muted small" id="awardPreview"></p>
+          <input id="awardReason" type="text" maxlength="80" placeholder="Reason (optional)" aria-label="Reason" list="reasonList">
+          <datalist id="reasonList">
+            <option value="Great answer"></option>
+            <option value="Homework"></option>
+            <option value="Helping others"></option>
+            <option value="Quiz winner"></option>
+            <option value="Off task"></option>
+          </datalist>
         </div>
       </div>
     </section>
 
-    <!-- SHOP -->
-    <section id="tab-shop" class="panel" aria-labelledby="shopTitle">
-      <div class="panel-head">
-        <h2 id="shopTitle">Power-up Shop</h2>
-        <p class="muted" id="shopHint">Spend your Brownie Points. Ask the teacher to buy a power-up for you.</p>
-      </div>
+    <section id="tab-shop" class="panel" aria-label="Power-ups">
       <div class="shop" id="shop"></div>
-    </section>
-
-    <!-- BROWNIES -->
-    <section id="tab-brownies" class="panel" aria-labelledby="browniesTitle">
-      <div class="panel-head">
-        <h2 id="browniesTitle">Eternal Brownie orders</h2>
-        <p class="muted">Every brownie bought appears here until you mark it as handed over.</p>
-      </div>
-      <div class="card">
-        <h3>To bake</h3>
+      <div class="card teacher-only" id="brownieCard" hidden>
+        <h2>Brownies owed</h2>
         <ul class="list" id="browniePending"></ul>
       </div>
-      <div class="card">
-        <h3>Handed over</h3>
-        <ul class="list" id="brownieDone"></ul>
-      </div>
     </section>
 
-    <!-- STUDENTS -->
-    <section id="tab-students" class="panel" aria-labelledby="studentsTitle">
-      <div class="panel-head">
-        <h2 id="studentsTitle">Students</h2>
-        <p class="muted">Add your class, fix names, or set someone's BP directly.</p>
-      </div>
+    <section id="tab-students" class="panel" aria-label="Students">
       <div class="student-layout">
+        <form class="card" id="addForm">
+          <h2>Add students</h2>
+          <textarea id="addNames" rows="6" placeholder="One name per line" aria-label="Student names"></textarea>
+          <button class="btn gold" type="submit">Add</button>
+        </form>
         <div class="card">
-          <h3>Add students</h3>
-          <form id="addForm" class="add-form">
-            <label class="field">
-              <span>Names (one per line, or paste a whole list)</span>
-              <textarea id="addNames" rows="6" placeholder="Amira&#10;Ben&#10;Charlie"></textarea>
-            </label>
-            <label class="field narrow">
-              <span>Starting BP</span>
-              <input id="addStart" type="number" step="0.5" value="0" min="0">
-            </label>
-            <button class="btn gold" type="submit">Add to club</button>
-          </form>
-        </div>
-        <div class="card">
-          <h3>Class list <span class="muted" id="studentTotal"></span></h3>
+          <h2>Class <span id="studentTotal"></span></h2>
           <div class="table-scroll">
-            <table class="students-table">
-              <thead><tr><th>Name</th><th class="num" title="Typing here sets the total directly and ignores power-ups">BP (set total)</th><th>Effects</th><th></th></tr></thead>
+            <table>
+              <thead><tr><th>Name</th><th class="num">BP</th><th></th></tr></thead>
               <tbody id="studentRows"></tbody>
             </table>
           </div>
@@ -174,77 +108,70 @@
       </div>
     </section>
 
-    <!-- HISTORY -->
-    <section id="tab-history" class="panel" aria-labelledby="historyTitle">
-      <div class="panel-head row-between">
-        <div>
-          <h2 id="historyTitle">History</h2>
-          <p class="muted">Every point given, power-up bought and wheel spun.</p>
+    <section id="tab-history" class="panel" aria-label="History">
+      <div class="card">
+        <div class="card-head">
+          <h2>History</h2>
+          <button class="btn small ghost teacher-only" id="undoBtn" type="button">Undo last</button>
         </div>
-        <button class="btn ghost teacher-only" id="undoBtn" type="button">Undo last action</button>
+        <ul class="log" id="log"></ul>
       </div>
-      <ul class="log" id="log"></ul>
     </section>
 
-    <!-- SETTINGS -->
-    <section id="tab-settings" class="panel" aria-labelledby="settingsTitle">
-      <div class="panel-head">
-        <h2 id="settingsTitle">Settings</h2>
-      </div>
+    <section id="tab-settings" class="panel" aria-label="Settings">
       <div class="settings-grid">
         <div class="card">
-          <h3>Club</h3>
-          <label class="field"><span>Club name</span><input id="setName" type="text" maxlength="40"></label>
-          <form id="pinForm" class="stack">
-            <label class="field"><span>New teacher PIN</span><input id="setPin" type="password" inputmode="numeric" autocomplete="new-password" minlength="3" maxlength="12" placeholder="At least 3 characters"></label>
-            <button class="btn ghost" type="submit">Change PIN</button>
+          <h2>Club</h2>
+          <label class="field"><span>Name</span><input id="setName" type="text" maxlength="40"></label>
+          <form class="inline-form" id="pinForm">
+            <label class="field"><span>Teacher PIN</span><input id="setPin" type="password" inputmode="numeric" autocomplete="new-password" minlength="3" maxlength="12" placeholder="New PIN"></label>
+            <button class="btn ghost" type="submit">Change</button>
           </form>
         </div>
 
         <div class="card">
-          <h3>Power-up prices</h3>
-          <div id="setPowerups" class="stack"></div>
+          <h2>Power-ups</h2>
+          <table class="pu-table">
+            <thead><tr><th></th><th class="num">Price</th><th class="num">On</th></tr></thead>
+            <tbody id="setPowerups"></tbody>
+          </table>
         </div>
 
         <div class="card span-2">
-          <div class="row-between">
-            <h3>Wheel of Fortune slices</h3>
+          <div class="card-head">
+            <h2>Wheel slices</h2>
             <div class="btn-row">
-              <button class="btn small ghost" id="wheelReset" type="button">Restore default slices</button>
+              <button class="btn small ghost" id="wheelReset" type="button">Reset</button>
               <button class="btn small gold" id="wheelAdd" type="button">Add slice</button>
             </div>
           </div>
-          <p class="muted small">Every slice has the same chance. BP won on the wheel (Win BP, a correct answer) is doubled by Rage and halved by Fireball, like any other BP earned. "Double your BP" and stealing are not.</p>
           <div class="table-scroll">
             <table class="wheel-table">
-              <thead><tr><th>Label on wheel</th><th>What happens</th><th class="num">Amount</th><th></th></tr></thead>
+              <thead><tr><th>Label</th><th>Effect</th><th class="num">BP</th><th></th></tr></thead>
               <tbody id="wheelRows"></tbody>
             </table>
           </div>
         </div>
 
         <div class="card">
-          <h3>Backup</h3>
-          <p class="muted small">Everything is saved in this browser on this computer. Download a backup now and then, especially before clearing browser data or switching computers.</p>
+          <h2>Backup</h2>
+          <p class="muted small">Saved in this browser only.</p>
           <div class="btn-row">
-            <button class="btn gold" id="exportBtn" type="button">Download backup</button>
-            <label class="btn ghost file-btn">Restore from backup<input id="importFile" type="file" accept="application/json,.json"></label>
+            <button class="btn ghost" id="exportBtn" type="button">Download</button>
+            <label class="btn ghost file-btn">Restore<input id="importFile" type="file" accept="application/json,.json"></label>
           </div>
         </div>
 
-        <div class="card danger-zone">
-          <h3>Start over</h3>
-          <p class="muted small">Reset all BP to zero for a new term, or wipe everything.</p>
+        <div class="card">
+          <h2>Reset</h2>
           <div class="btn-row">
-            <button class="btn ghost" id="resetPointsBtn" type="button">Reset all BP to 0</button>
+            <button class="btn ghost" id="resetPointsBtn" type="button">Set all BP to 0</button>
             <button class="btn danger" id="wipeBtn" type="button">Delete everything</button>
           </div>
         </div>
       </div>
     </section>
   </main>
-
-  <div class="display-ticker" id="ticker" aria-live="polite"></div>
 
   <div class="modal-backdrop" id="modal" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
