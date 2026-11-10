@@ -50,6 +50,14 @@ The database rules are in `firestore.rules`: paste them into Firebase → Firest
 
 **Settings → Backup → Download** saves a copy as a file; **Restore** loads it.
 
-## Hosting (GitHub Pages)
+## Hosting (Firebase)
 
-**Settings → Pages → Deploy from a branch**, pick the branch and `/ (root)`. The site appears at `https://<username>.github.io/<repo>/`.
+From this folder, on a computer with Node.js installed:
+
+```
+npm install -g firebase-tools
+firebase login
+firebase deploy
+```
+
+This publishes the site to `https://bpclub-b2935.web.app` and the database rules in `firestore.rules`. Run `firebase deploy` again after any change.
