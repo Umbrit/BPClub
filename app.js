@@ -17,7 +17,7 @@
       desc: (p) => `2× BP for ${p.days} days` },
     { id: 'fireball', name: 'Fireball', art: '🔥', cost: 20, enabled: true,
       desc: () => 'Target earns ½ BP for 1 lesson' },
-    { id: 'minus', name: 'Minus Spell', art: '🪄', cost: 15, amount: 8, enabled: true,
+    { id: 'minus', name: 'Minus Spell', art: '🔮', cost: 15, amount: 8, enabled: true,
       desc: (p) => `Target loses ${fmt(p.amount)} BP` },
     { id: 'wheel', name: 'Wheel of Fortune', art: '🎡', cost: 8, enabled: true,
       desc: () => 'Spin for a random prize or penalty' },
@@ -221,7 +221,7 @@
     if (f) out.push(h('span', { class: 'fx fire', title: `Fireball from ${nameOf(f.by)}: earns ½ BP this lesson` }, '🔥 ½ BP'));
     const fp = fireballPending(id);
     if (fp) out.push(h('span', { class: 'fx fire pending', title: `Fireball from ${nameOf(fp.by)}: earns ½ BP next lesson` }, '🔥 next lesson'));
-    minusHits(id).forEach((m) => out.push(h('span', { class: 'fx minus', title: `Minus Spell from ${nameOf(m.by)}` }, `🪄 −${fmt(m.amount)}`)));
+    minusHits(id).forEach((m) => out.push(h('span', { class: 'fx minus', title: `Minus Spell from ${nameOf(m.by)}` }, `🔮 −${fmt(m.amount)}`)));
     const owed = browniesOwed(id);
     if (owed) out.push(h('span', { class: 'fx brownie', title: 'Eternal Brownie owed' }, `🍫 owed${owed > 1 ? ' ×' + owed : ''}`));
     return out.length ? h('span', { class: 'fx-wrap' }, out) : null;
@@ -310,7 +310,7 @@
           state.effects.push({ id: uid(), type: 'minus', studentId: target.id, by: buyerId, amount: lost, lesson: state.lesson });
           flash.add(target.id);
           log(`${buyer.name} ${paid} on ${target.name}, who lost ${fmt(lost)} BP`, { kind: 'power', delta: -lost });
-          toast(`🪄 ${target.name} loses ${fmt(lost)} BP`);
+          toast(`🔮 ${target.name} loses ${fmt(lost)} BP`);
           break;
         }
         case 'wheel':
@@ -351,7 +351,6 @@
   function askPin() {
     const input = h('input', { id: 'pinInput', class: 'pin-input', type: 'password', inputmode: 'numeric', autocomplete: 'current-password', 'aria-label': 'Teacher PIN' });
     const err = h('p', { class: 'error', hidden: true }, 'Wrong PIN');
-    const hint = state.pinChanged ? null : h('p', { class: 'muted small' }, 'Default PIN: 1234');
     const tryIt = () => {
       if (input.value === String(state.pin)) { closeModal(); setTeacher(true); }
       else { err.hidden = false; input.select(); }
@@ -359,7 +358,7 @@
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryIt(); });
     openModal({
       title: 'Teacher login',
-      body: [input, err, hint],
+      body: [input, err],
       actions: [{ label: 'Cancel' }, { label: 'Log in', kind: 'gold', keep: true, onClick: tryIt }],
       focus: input,
     });
