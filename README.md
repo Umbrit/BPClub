@@ -1,6 +1,6 @@
 # BP Club
 
-A Brownie Points (BP) leaderboard and power-up shop for the classroom, run from the teacher's computer. No installation, accounts or server: open `index.html` and everything is saved in that browser.
+A Brownie Points (BP) leaderboard and power-up shop for the classroom, synced across devices. The teacher signs in to give BP; everyone else can watch the leaderboard live.
 
 ## Ranks
 
@@ -34,22 +34,22 @@ Prices, Rage length, the Minus Spell amount and the wheel slices can be changed 
 
 ## Using it
 
-1. Open `index.html`, press **Teacher login** and enter PIN `1234`. Change the PIN in **Settings**.
+1. Open the site, press **Teacher login** and sign in with the teacher email and password (created in Firebase → Authentication → Users).
 2. Add your class in **Students** (one name per line), or press **Load example class** to try it out.
 3. **Give BP**: tap students, then tap an amount.
 4. **Power-ups**: press **Buy** and pick the buyer (and target).
 5. Press **End lesson** at the end of each lesson.
-6. **Lock** hides all teacher controls.
+6. **Lock** signs the teacher out and hides all controls.
 7. **History** lists everything; **Undo last** (or Ctrl+Z) reverses a mistake.
 
-## Your data
+## Sync
 
-BP is saved in the browser on the teacher's computer. It is lost if that browser's site data is cleared, and it does not move to other computers. Use **Settings → Backup → Download** regularly; **Restore** loads it anywhere.
+The club is stored online in Firebase (Firestore document `clubs/main`). Any device that opens the site sees the same leaderboard, live. Only the signed-in teacher can change anything; everyone else is read-only.
 
-The PIN only stops students clicking buttons; don't reuse an important password.
+The database rules are in `firestore.rules`: paste them into Firebase → Firestore Database → Rules and press **Publish**. The first teacher account to save becomes the owner, and only that account can write afterwards.
 
-## Putting it online (GitHub Pages)
+**Settings → Backup → Download** saves a copy as a file; **Restore** loads it.
 
-1. On GitHub open **Settings → Pages**.
-2. Choose **Deploy from a branch**, pick the branch and the `/ (root)` folder, then **Save**.
-3. The site appears at `https://<username>.github.io/<repo>/` after a minute.
+## Hosting (GitHub Pages)
+
+**Settings → Pages → Deploy from a branch**, pick the branch and `/ (root)`. The site appears at `https://<username>.github.io/<repo>/`.

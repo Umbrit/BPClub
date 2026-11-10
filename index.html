@@ -123,10 +123,6 @@
         <div class="card">
           <h2>Club</h2>
           <label class="field"><span>Name</span><input id="setName" type="text" maxlength="40"></label>
-          <form class="inline-form" id="pinForm">
-            <label class="field"><span>Teacher PIN</span><input id="setPin" type="password" inputmode="numeric" autocomplete="new-password" minlength="3" maxlength="12" placeholder="New PIN"></label>
-            <button class="btn ghost" type="submit">Change</button>
-          </form>
         </div>
 
         <div class="card">
@@ -185,6 +181,9 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

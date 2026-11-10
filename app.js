@@ -1,11 +1,19 @@
 /* BP Club — Brownie Points leaderboard with power-ups.
-   Everything runs in the browser and is saved to localStorage on the teacher's computer. */
+   State is kept in one Firestore document so every device sees the same club.
+   Anyone can read it; only the signed-in teacher can change it. localStorage is a local cache. */
 (() => {
   'use strict';
 
   const STORE_KEY = 'bpclub.v1';
   const UNDO_KEY = 'bpclub.v1.undo';
-  const SESSION_KEY = 'bpclub.teacher';
+  const FIREBASE_CONFIG = {
+    apiKey: 'AIzaSyArI8A8H_fc0YdTOnGQY5il_X6UWhWEL9I',
+    authDomain: 'bpclub-b2935.firebaseapp.com',
+    projectId: 'bpclub-b2935',
+    storageBucket: 'bpclub-b2935.firebasestorage.app',
+    messagingSenderId: '600143723517',
+    appId: '1:600143723517:web:8b7e55cd55ed38dcfc7794',
+  };
   const DAY = 86400000;
   const MAX_LOG = 400;
   const MAX_UNDO = 15;
@@ -60,8 +68,6 @@
     return {
       version: 1,
       clubName: 'BP Club',
-      pin: '1234',
-      pinChanged: false,
       lesson: 1,
       students: [],
       powerups: DEFAULT_POWERUPS.map(({ id, cost, days, amount, enabled }) => ({ id, cost, days, amount, enabled })),
@@ -106,6 +112,7 @@
     saveOk = writeJSON(STORE_KEY, state);
     // the undo history is a nice-to-have: drop the oldest steps if storage is full
     while (!writeJSON(UNDO_KEY, undoStack) && undoStack.length) undoStack.shift();
+    pushRemote();
   }
 
   /** Run a change: snapshot for undo, mutate, save, re-render. */
@@ -339,29 +346,81 @@
 
   /* ------------------------------------------------------------------ teacher mode */
 
-  let teacher = (() => { try { return sessionStorage.getItem(SESSION_KEY) === '1'; } catch (e) { return false; } })();
+  let teacher = false;
 
   function setTeacher(on) {
     teacher = on;
-    try { on ? sessionStorage.setItem(SESSION_KEY, '1') : sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
     if (!on && document.querySelector('.tab.active.teacher-only')) showTab('board');
     render();
   }
 
-  function askPin() {
-    const input = h('input', { id: 'pinInput', class: 'pin-input', type: 'password', inputmode: 'numeric', autocomplete: 'current-password', 'aria-label': 'Teacher PIN' });
-    const err = h('p', { class: 'error', hidden: true }, 'Wrong PIN');
+  function askLogin() {
+    const email = h('input', { id: 'loginEmail', type: 'text', inputmode: 'email', autocomplete: 'username', placeholder: 'Email', 'aria-label': 'Email' });
+    const pass = h('input', { id: 'loginPass', type: 'password', autocomplete: 'current-password', placeholder: 'Password', 'aria-label': 'Password' });
+    const err = h('p', { class: 'error', hidden: true });
     const tryIt = () => {
-      if (input.value === String(state.pin)) { closeModal(); setTeacher(true); }
-      else { err.hidden = false; input.select(); }
+      if (!auth) { err.textContent = 'No connection'; err.hidden = false; return; }
+      auth.signInWithEmailAndPassword(email.value.trim(), pass.value)
+        .then(() => closeModal())
+        .catch((e) => {
+          err.textContent = e && e.code === 'auth/network-request-failed' ? 'No connection' : 'Wrong email or password';
+          err.hidden = false;
+        });
     };
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryIt(); });
+    [email, pass].forEach((el) => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryIt(); }));
     openModal({
       title: 'Teacher login',
-      body: [input, err],
+      body: [email, pass, err],
       actions: [{ label: 'Cancel' }, { label: 'Log in', kind: 'gold', keep: true, onClick: tryIt }],
-      focus: input,
+      focus: email,
     });
+  }
+
+  /* ------------------------------------------------------------------ online sync */
+
+  let auth = null, docRef = null, user = null;
+  let remoteReady = false, remoteExists = false, pushTimer = null;
+
+  /** Teacher controls unlock only once we are signed in AND have the latest online copy. */
+  function refreshTeacher() {
+    const on = !!user && remoteReady;
+    if (on !== teacher) setTeacher(on);
+    if (on && !remoteExists) pushRemote();   // first ever login: upload what is on this device
+  }
+
+  function pushRemote() {
+    if (!teacher || !docRef) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => {
+      docRef.set({ owner: user.uid, data: JSON.stringify(state), updatedAt: Date.now() })
+        .then(() => { remoteExists = true; })
+        .catch(() => toast('Not saved online. Check the connection.'));
+    }, 250);
+  }
+
+  function initSync() {
+    if (!window.firebase) { toast('No connection. Showing the last saved copy.'); return; }
+    firebase.initializeApp(FIREBASE_CONFIG);
+    auth = firebase.auth();
+    docRef = firebase.firestore().collection('clubs').doc('main');
+    auth.onAuthStateChanged((u) => { user = u; refreshTeacher(); });
+    docRef.onSnapshot((snap) => {
+      remoteReady = true;
+      remoteExists = snap.exists;
+      const pendingLocal = snap.metadata && snap.metadata.hasPendingWrites;
+      const data = snap.exists && !pendingLocal ? snap.data().data : null;
+      if (data && data !== JSON.stringify(state)) {
+        try {
+          const next = normalise(JSON.parse(data));
+          const prev = new Map(state.students.map((s) => [s.id, s.bp]));
+          next.students.forEach((s) => { if (prev.has(s.id) && prev.get(s.id) !== s.bp) flash.add(s.id); });
+          state = next;
+          writeJSON(STORE_KEY, state);
+          if ($('#modal').hidden || !teacher) render();
+        } catch (e) { /* ignore a bad copy */ }
+      }
+      refreshTeacher();
+    }, () => toast('Cannot reach the online copy.'));
   }
 
   /* ------------------------------------------------------------------ modal & toast */
@@ -843,7 +902,7 @@
   function wire() {
     document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
 
-    $('#lockBtn').addEventListener('click', () => { if (teacher) setTeacher(false); else askPin(); });
+    $('#lockBtn').addEventListener('click', () => { if (user && auth) auth.signOut(); else askLogin(); });
     $('#endLessonBtn').addEventListener('click', () => {
       const fb = state.effects.filter((e) => e.type === 'fireball' && e.lesson === state.lesson).map((e) => nameOf(e.studentId));
       confirmBox(`End lesson ${state.lesson}?`, fb.length ? `Fireball wears off for ${fb.join(', ')}.` : '', 'End lesson', endLesson);
@@ -891,14 +950,6 @@
 
     // Settings
     $('#setName').addEventListener('change', (e) => { const v = e.target.value.trim() || 'BP Club'; commit(() => { state.clubName = v; }); });
-    $('#pinForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const v = $('#setPin').value.trim();
-      if (v.length < 3) { toast('Use at least 3 characters for the PIN'); return; }
-      state.pin = v; state.pinChanged = true; save();
-      $('#setPin').value = '';
-      toast('PIN changed');
-    });
     $('#wheelAdd').addEventListener('click', () => commit(() => { state.wheel.push({ label: '+3 BP', type: 'gain', value: 3 }); }));
     $('#wheelReset').addEventListener('click', () => confirmBox('Reset wheel slices?', '', 'Reset', () => commit(() => { state.wheel = DEFAULT_WHEEL.map((s) => ({ ...s })); })));
 
@@ -938,8 +989,7 @@
         body: [h('p', null, 'Removes all students, BP, history and settings.'), h('label', { class: 'field' }, h('span', null, 'Type DELETE to confirm'), input)],
         actions: [{ label: 'Cancel' }, { label: 'Delete everything', kind: 'danger', keep: true, onClick: () => {
           if (input.value.trim().toUpperCase() !== 'DELETE') { toast('Type DELETE to confirm'); return; }
-          const pin = state.pin, pinChanged = state.pinChanged;
-          state = freshState(); state.pin = pin; state.pinChanged = pinChanged;
+          state = freshState();
           undoStack = [];
           save(); closeModal(); render();
         } }],
@@ -971,5 +1021,6 @@
   const tabBtn = savedTab && document.querySelector(`.tab[data-tab="${savedTab}"]`);
   showTab(tabBtn && (teacher || !tabBtn.classList.contains('teacher-only')) ? savedTab : 'board');
   render();
+  initSync();
   if (!saveOk) toast('This browser is blocking storage, so BP will not be saved. Try a normal (not private) window.');
 })();
