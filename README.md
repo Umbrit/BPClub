@@ -35,7 +35,7 @@ Prices, Rage length, the Minus Spell amount and the wheel slices can be changed 
 ## Using it
 
 1. Open the site, press **Teacher login** and sign in with the teacher email and password (created in Firebase → Authentication → Users).
-2. Add your class in **Students** (one name per line), or press **Load example class** to try it out.
+2. Add your class in **Students** (one name per line).
 3. **Give BP**: tap students, then tap an amount.
 4. **Power-ups**: press **Buy** and pick the buyer (and target).
 5. Press **End lesson** at the end of each lesson.
@@ -50,14 +50,6 @@ The database rules are in `firestore.rules`: paste them into Firebase → Firest
 
 **Settings → Backup → Download** saves a copy as a file; **Restore** loads it.
 
-## Hosting (Firebase)
+## Hosting (GitHub Pages)
 
-From this folder, on a computer with Node.js installed:
-
-```
-npm install -g firebase-tools
-firebase login
-firebase deploy
-```
-
-This publishes the site to `https://bpclub-b2935.web.app` and the database rules in `firestore.rules`. Run `firebase deploy` again after any change.
+**Settings → Pages → Deploy from a branch**, pick the branch and `/ (root)`. The site appears at `https://<username>.github.io/<repo>/`.

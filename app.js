@@ -62,8 +62,6 @@
 
   const WHEEL_COLORS = ['#7a3e1d', '#e5b850', '#5b2f17', '#d08a4e', '#3f2414', '#f0d48a', '#8c4a22', '#b8862e'];
 
-  const EXAMPLE_NAMES = ['Amira', 'Ben', 'Chloe', 'Dev', 'Ella', 'Finn', 'Grace', 'Harvey', 'Isla', 'Jamal', 'Kiara', 'Leo'];
-
   function freshState() {
     return {
       version: 1,
@@ -885,18 +883,6 @@
     try { sessionStorage.setItem('bpclub.tab', name); } catch (e) { /* ignore */ }
   }
 
-  /* ------------------------------------------------------------------ example class */
-
-  function loadExample() {
-    commit(() => {
-      const pts = [34, 27, 22, 19, 15, 12, 11, 9, 7, 5, 3, 0];
-      state.students = EXAMPLE_NAMES.map((n, i) => ({ id: uid(), name: n, bp: pts[i], createdAt: Date.now() }));
-      state.effects.push({ id: uid(), type: 'rage', studentId: state.students[1].id, expiresAt: Date.now() + 9 * DAY });
-      state.effects.push({ id: uid(), type: 'fireball', studentId: state.students[0].id, by: state.students[3].id, lesson: state.lesson });
-      log('Example class loaded', { kind: 'admin' });
-    });
-  }
-
   /* ------------------------------------------------------------------ wiring */
 
   function wire() {
@@ -908,7 +894,6 @@
       confirmBox(`End lesson ${state.lesson}?`, fb.length ? `Fireball wears off for ${fb.join(', ')}.` : '', 'End lesson', endLesson);
     });
     $('#emptyAdd').addEventListener('click', () => showTab('students'));
-    $('#emptyExample').addEventListener('click', loadExample);
 
     $('#modalClose').addEventListener('click', closeModal);
     $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal' && $('#modal').dataset.closable) closeModal(); });
